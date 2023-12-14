@@ -1,7 +1,3 @@
-#if os(macOS)
-#error("This library is not compatible with macOS")
-#endif
-
 import Speech
 
 public struct SwiftSpeechRecognizer {
@@ -71,9 +67,21 @@ private final class SpeechRecognitionSpeechEngine: NSObject, ObservableObject, S
     private var recognitionTask: SFSpeechRecognitionTask?
 
     func requestAuthorization() {
-        SFSpeechRecognizer.requestAuthorization { @MainActor [weak self] authorizationStatus in
+#if os(macOS)
+        AVCaptureDevice.requestAccess(for: .audio) { granted in
+            if granted {
+                SFSpeechRecognizer.requestAuthorization { [weak self] authorizationStatus in
+                    self?.authorizationStatus(authorizationStatus)
+                }
+            } else {
+                self.authorizationStatus(.denied)
+            }
+        }
+#else
+        SFSpeechRecognizer.requestAuthorization { [weak self] authorizationStatus in
             self?.authorizationStatus(authorizationStatus)
         }
+#endif
     }
 
     func startRecording() throws {
@@ -86,10 +94,19 @@ private final class SpeechRecognitionSpeechEngine: NSObject, ObservableObject, S
         recognizedUtterance(nil)
 
         // Configure the audio session for the app.
+        let inputNode = audioEngine.inputNode
+#if os(macOS)
+        do {
+            try inputNode.setVoiceProcessingEnabled(true)
+            try self.audioEngine.outputNode.setVoiceProcessingEnabled(true)
+        } catch {
+            print("Could not enable voice processing: \(error)")
+        }
+#else
         let audioSession = AVAudioSession.sharedInstance()
         try audioSession.setCategory(.playAndRecord, mode: .measurement, options: .duckOthers)
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-        let inputNode = audioEngine.inputNode
+#endif
 
         // Create and configure the speech recognition request.
         recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
@@ -105,7 +122,7 @@ private final class SpeechRecognitionSpeechEngine: NSObject, ObservableObject, S
         // Create a recognition task for the speech recognition session.
         // Keep a reference to the task so that it can be canceled.
         recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) {
-            @MainActor [weak self] result, error in
+            [weak self] result, error in
             guard let self = self else { return }
 
             var isFinal = false

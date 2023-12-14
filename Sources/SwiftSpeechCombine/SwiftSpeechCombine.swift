@@ -1,7 +1,3 @@
-#if os(macOS)
-#error("This library is not compatible with macOS")
-#endif
-
 import Combine
 import Speech
 import SwiftSpeechRecognizer
@@ -72,9 +68,12 @@ public final class SpeechRecognitionSpeechEngine: NSObject, ObservableObject, SF
         recognizedUtterance = nil
 
         // Configure the audio session for the app.
+#if os(macOS)
+#else
         let audioSession = AVAudioSession.sharedInstance()
         try audioSession.setCategory(.playAndRecord, mode: .measurement, options: .duckOthers)
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
+#endif
         let inputNode = audioEngine.inputNode
 
         // Create and configure the speech recognition request.
